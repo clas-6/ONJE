@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>ÒNJẸ - Premium Student Kitchen Order Board</title>
+    <!-- Google Fonts - Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  </head>
+  <body>
+    <!-- Setup Overlay (Displayed if Supabase Config is missing in LocalStorage and not in env) -->
+    <div id="setup-overlay" class="auth-overlay hidden">
+      <div class="auth-card glow-orange">
+        <div class="logo-container">
+          <img src="/ONJE_LOGO.jpeg" alt="ÒNJẸ Logo" class="auth-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
+          <h2>ÒNJẸ</h2>
+          <p class="subtitle">Supabase Connection Setup</p>
+        </div>
+        <p class="setup-desc">Please enter your Supabase project credentials to connect your database. These are stored locally in your browser.</p>
+        <form id="setup-form">
+          <div class="input-group">
+            <label for="setup-url">Supabase URL</label>
+            <input type="url" id="setup-url" placeholder="https://xxxx.supabase.co" required>
+          </div>
+          <div class="input-group">
+            <label for="setup-key">Supabase Anon Key</label>
+            <input type="password" id="setup-key" placeholder="eyJhbGciOiJIUzI1NiIsIn..." required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Connect Database</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="auth-overlay">
+      <div class="auth-card glow-orange">
+        <div class="logo-container">
+          <img src="/ONJE_LOGO.jpeg" alt="ÒNJẸ Logo" class="auth-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
+          <h2>ÒNJẸ</h2>
+          <p class="subtitle">Student Kitchen Order Board</p>
+        </div>
+        
+        <div class="role-selector">
+          <button class="role-btn active" data-role="Admin">
+            <i class="fa-solid fa-user-shield"></i>
+            <span>You (Admin)</span>
+          </button>
+          <button class="role-btn" data-role="Partner">
+            <i class="fa-solid fa-user-group"></i>
+            <span>Partner (Admin)</span>
+          </button>
+          <button class="role-btn" data-role="Cook">
+            <i class="fa-solid fa-fire-burner"></i>
+            <span>Cook</span>
+          </button>
+        </div>
+
+        <form id="login-form">
+          <div class="pin-group">
+            <label for="pin-input">Enter PIN</label>
+            <div class="pin-display">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+            <input type="password" id="pin-input" maxlength="4" autofocus readonly>
+          </div>
+
+          <div class="keypad">
+            <button type="button" class="key-btn" data-val="1">1</button>
+            <button type="button" class="key-btn" data-val="2">2</button>
+            <button type="button" class="key-btn" data-val="3">3</button>
+            <button type="button" class="key-btn" data-val="4">4</button>
+            <button type="button" class="key-btn" data-val="5">5</button>
+            <button type="button" class="key-btn" data-val="6">6</button>
+            <button type="button" class="key-btn" data-val="7">7</button>
+            <button type="button" class="key-btn" data-val="8">8</button>
+            <button type="button" class="key-btn" data-val="9">9</button>
+            <button type="button" class="key-btn text-danger" id="key-clear"><i class="fa-solid fa-backspace"></i></button>
+            <button type="button" class="key-btn" data-val="0">0</button>
+            <button type="button" class="key-btn text-success" id="key-submit"><i class="fa-solid fa-circle-check"></i></button>
+          </div>
+          
+          <div id="login-error" class="login-error hidden">
+            <i class="fa-solid fa-triangle-exclamation"></i> Invalid PIN
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Main Application Interface -->
+    <div id="app-container" class="app-layout hidden">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-logo-wrapper">
+            <img src="/ONJE_LOGO.jpeg" alt="ÒNJẸ Logo" class="brand-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
+          </div>
+          <div class="brand-info">
+            <span class="brand-name">ÒNJẸ</span>
+            <span class="brand-sub">Student Kitchen</span>
+          </div>
+        </div>
+
+        <nav class="nav-menu">
+          <a href="#" class="nav-link active" data-page="orders">
+            <i class="fa-solid fa-receipt"></i>
+            <span>Orders</span>
+          </a>
+          <a href="#" class="nav-link" data-page="kitchen">
+            <i class="fa-solid fa-kitchen-set"></i>
+            <span>Kitchen</span>
+            <span class="badge badge-orange hidden" id="kitchen-count-badge">0</span>
+          </a>
+          <a href="#" class="nav-link" data-page="menu">
+            <i class="fa-solid fa-utensils"></i>
+            <span>Menu</span>
+          </a>
+          <a href="#" class="nav-link" data-page="sales">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Sales</span>
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user-profile">
+            <div class="avatar" id="user-avatar">
+              <i class="fa-solid fa-user"></i>
+            </div>
+            <div class="user-meta">
+              <span class="user-name" id="profile-name">Admin</span>
+              <span class="user-role" id="profile-role">Administrator</span>
+            </div>
+          </div>
+          <button id="logout-btn" class="btn-logout" title="Log Out">
+            <i class="fa-solid fa-right-from-bracket"></i>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- Top Bar -->
+        <header class="top-bar">
+          <h1 id="page-title">Orders</h1>
+          <div class="header-right">
+            <!-- Connection Status -->
+            <div class="db-status-badge online" id="connection-status">
+              <span class="pulse-dot"></span>
+              <span class="status-text">Connected</span>
+            </div>
+            <!-- Sync Settings (allows updating database keys) -->
+            <button id="btn-db-settings" class="btn btn-icon" title="Database Settings">
+              <i class="fa-solid fa-database"></i>
+            </button>
+            <div class="clock" id="live-clock">12:00:00 PM</div>
+          </div>
+        </header>
+
+        <!-- Pages Containers -->
+        <div class="page-container">
+          
+          <!-- 1. ORDERS PAGE -->
+          <section id="page-orders" class="app-page active">
+            <div class="grid grid-2-col">
+              <!-- New Order Panel -->
+              <div class="card card-glow">
+                <div class="card-header">
+                  <h3><i class="fa-solid fa-circle-plus text-primary"></i> Create New Order</h3>
+                </div>
+                <div class="card-body">
+                  <!-- Empty Menu Callout (Shown when menu has no items) -->
+                  <div id="empty-menu-callout" class="empty-state hidden">
+                    <i class="fa-solid fa-basket-shopping text-muted"></i>
+                    <h4>Your menu is empty</h4>
+                    <p>Before you can place an order, you need to add food items to your menu.</p>
+                    <button class="btn btn-primary" id="btn-go-to-menu">
+                      <i class="fa-solid fa-plus"></i> Add Menu Items
+                    </button>
+                  </div>
+
+                  <!-- Order Form -->
+                  <form id="order-form">
+                    <div class="form-group">
+                      <label for="order-customer">Customer Name</label>
+                      <div class="input-icon-wrapper">
+                        <i class="fa-solid fa-user input-icon"></i>
+                        <input type="text" id="order-customer" placeholder="Enter student's name..." required autocomplete="off">
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Food & Drinks</label>
+                      <div class="food-checklist-container" id="food-checklist">
+                        <!-- Dynamically filled with menu items -->
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="order-notes">Notes / Special Instructions</label>
+                      <textarea id="order-notes" rows="2" placeholder="e.g. No pepper, extra chicken..."></textarea>
+                    </div>
+
+                    <div class="order-summary-box">
+                      <div class="summary-row">
+                        <span>Total Items selected:</span>
+                        <span id="summary-items-count">0</span>
+                      </div>
+                      <div class="summary-row total-row">
+                        <span>Total Price:</span>
+                        <span id="summary-total" class="text-primary font-lg">₦0</span>
+                      </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-create-order">
+                      <i class="fa-solid fa-paper-plane"></i> Create Order
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <!-- Recent Activity & Status Feed -->
+              <div class="card flex-column">
+                <div class="card-header">
+                  <h3><i class="fa-solid fa-clock-rotate-left"></i> Today's Live Feed</h3>
+                </div>
+                <div class="card-body feed-body">
+                  <div id="order-feed-list" class="feed-list">
+                    <!-- Loaded dynamically -->
+                    <div class="empty-state">
+                      <i class="fa-solid fa-receipt text-muted"></i>
+                      <p>No orders placed yet today.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. KITCHEN PAGE -->
+          <section id="page-kitchen" class="app-page">
+            <!-- Active Orders Grid -->
+            <div class="kitchen-dashboard">
+              <div class="kitchen-stats">
+                <div class="stat-mini card">
+                  <span class="label">🟡 Waiting</span>
+                  <span class="value" id="k-stat-waiting">0</span>
+                </div>
+                <div class="stat-mini card">
+                  <span class="label">🟠 Cooking</span>
+                  <span class="value text-warning" id="k-stat-cooking">0</span>
+                </div>
+                <div class="stat-mini card">
+                  <span class="label">🟢 Ready</span>
+                  <span class="value text-success" id="k-stat-ready">0</span>
+                </div>
+              </div>
+
+              <div id="kitchen-orders-grid" class="kitchen-grid">
+                <!-- Dynamically loaded order cards -->
+                <div class="empty-state full-width">
+                  <i class="fa-solid fa-fire-burner text-muted"></i>
+                  <h4>No Active Kitchen Orders</h4>
+                  <p>Orders will appear here as soon as they are placed.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3. MENU PAGE -->
+          <section id="page-menu" class="app-page">
+            <div class="grid grid-2-col">
+              <!-- Add Menu Item Panel -->
+              <div class="card">
+                <div class="card-header">
+                  <h3><i class="fa-solid fa-plus text-primary"></i> Add Food Item</h3>
+                </div>
+                <div class="card-body">
+                  <form id="menu-item-form">
+                    <div class="form-group">
+                      <label for="item-name">Food/Drink Name</label>
+                      <input type="text" id="item-name" placeholder="e.g. Jollof Rice, Turkey..." required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                      <label for="item-price">Price (₦)</label>
+                      <div class="input-icon-wrapper">
+                        <span class="input-prefix">₦</span>
+                        <input type="number" id="item-price" min="0" placeholder="e.g. 2500" required>
+                      </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                      <i class="fa-solid fa-plus"></i> Add to Menu
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <!-- Menu Items Table -->
+              <div class="card">
+                <div class="card-header">
+                  <h3><i class="fa-solid fa-list-ul"></i> Active Menu</h3>
+                </div>
+                <div class="card-body p-0">
+                  <div class="table-container">
+                    <table class="menu-table">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Price</th>
+                          <th class="text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="menu-items-table-body">
+                        <!-- Loaded dynamically -->
+                        <tr>
+                          <td colspan="3" class="text-center p-4 text-muted">No items in menu. Use the form to add some!</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 4. SALES PAGE -->
+          <section id="page-sales" class="app-page">
+            <!-- Sales Stats Cards -->
+            <div class="sales-stats-grid">
+              <div class="stat-card card">
+                <div class="stat-icon bg-orange-soft">
+                  <i class="fa-solid fa-clipboard-list text-primary"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="label">Today's Orders</span>
+                  <h2 id="sales-stat-orders">0</h2>
+                </div>
+              </div>
+              <div class="stat-card card">
+                <div class="stat-icon bg-green-soft">
+                  <i class="fa-solid fa-naira-sign text-success"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="label">Today's Revenue</span>
+                  <h2 id="sales-stat-revenue">₦0</h2>
+                </div>
+              </div>
+              <div class="stat-card card animate-pulse-orange">
+                <div class="stat-icon bg-blue-soft">
+                  <i class="fa-solid fa-wallet text-info"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="label">Today's Profit (45%)</span>
+                  <h2 id="sales-stat-profit">₦0</h2>
+                </div>
+              </div>
+            </div>
+
+            <!-- Transaction History Card -->
+            <div class="card mt-4">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-history"></i> Today's Transactions</h3>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-container">
+                  <table class="sales-table">
+                    <thead>
+                      <tr>
+                        <th>Order ID</th>
+                        <th>Time</th>
+                        <th>Customer</th>
+                        <th>Items</th>
+                        <th>Total</th>
+                        <th>Profit</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sales-history-tbody">
+                      <!-- Loaded dynamically -->
+                      <tr>
+                        <td colspan="7" class="text-center p-4 text-muted">No sales logged today yet.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+
+    <!-- Script Entrypoint -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
