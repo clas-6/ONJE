@@ -804,6 +804,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .form-group input[type="text"],
+.form-group select,
 .form-group textarea {
   width: 100%;
   background: var(--bg-input);
@@ -819,6 +820,11 @@ h1, h2, h3, h4, h5, h6 {
 
 .form-group textarea {
   resize: vertical;
+}
+
+.form-group select {
+  appearance: none;
+  cursor: pointer;
 }
 
 .input-icon-wrapper {
@@ -906,6 +912,12 @@ h1, h2, h3, h4, h5, h6 {
   flex: 1;
 }
 
+.food-label-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 /* Custom Checkbox */
 .custom-checkbox {
   position: relative;
@@ -940,6 +952,25 @@ h1, h2, h3, h4, h5, h6 {
 .food-name {
   font-weight: 500;
   font-size: 0.95rem;
+}
+
+.menu-item-name {
+  font-weight: 600;
+  font-size: 0.98rem;
+}
+
+.menu-category-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 77, 0, 0.08);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .food-price {
@@ -1286,6 +1317,24 @@ h1, h2, h3, h4, h5, h6 {
 .k-status-indicator.status-cooking { color: var(--primary); }
 .k-status-indicator.status-ready { color: var(--success); }
 
+.k-action-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.btn-whatsapp-order {
+  background: rgba(37, 211, 102, 0.08);
+  color: #25d366;
+  border: 1px solid rgba(37, 211, 102, 0.18);
+}
+
+.btn-whatsapp-order:hover {
+  background: #25d366;
+  color: #062b14;
+  border-color: #25d366;
+}
+
 /* --- MENU PAGE TABLES --- */
 .table-container {
   overflow-x: auto;
@@ -1323,6 +1372,12 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.menu-table .food-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 /* Inline Edit Mode */
@@ -1376,8 +1431,12 @@ h1, h2, h3, h4, h5, h6 {
 /* --- SALES DASHBOARD --- */
 .sales-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.5rem;
+}
+
+.order-stats-grid {
+  margin-bottom: 1.5rem;
 }
 
 .stat-card {

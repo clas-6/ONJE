@@ -4,47 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>ÒNJẸ - Premium Student Kitchen Order Board</title>
-    <!-- Google Fonts - Outfit -->
+    <title>ONJE - Premium Student Kitchen Order Board</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- FontAwesome for Premium Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   </head>
   <body>
-    <!-- Setup Overlay (Displayed if Supabase Config is missing in LocalStorage and not in env) -->
-    <div id="setup-overlay" class="auth-overlay hidden">
-      <div class="auth-card glow-orange">
-        <div class="logo-container">
-          <img src="/ONJE_LOGO.jpeg" alt="ÒNJẸ Logo" class="auth-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
-          <h2>ÒNJẸ</h2>
-          <p class="subtitle">Supabase Connection Setup</p>
-        </div>
-        <p class="setup-desc">Please enter your Supabase project credentials to connect your database. These are stored locally in your browser.</p>
-        <form id="setup-form">
-          <div class="input-group">
-            <label for="setup-url">Supabase URL</label>
-            <input type="url" id="setup-url" placeholder="https://xxxx.supabase.co" required>
-          </div>
-          <div class="input-group">
-            <label for="setup-key">Supabase Anon Key</label>
-            <input type="password" id="setup-key" placeholder="eyJhbGciOiJIUzI1NiIsIn..." required>
-          </div>
-          <button type="submit" class="btn btn-primary btn-block">Connect Database</button>
-        </form>
-      </div>
-    </div>
-
     <!-- Login Overlay -->
     <div id="login-overlay" class="auth-overlay">
       <div class="auth-card glow-orange">
         <div class="logo-container">
-          <img src="/ONJE_LOGO.jpeg" alt="ÒNJẸ Logo" class="auth-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
-          <h2>ÒNJẸ</h2>
+          <img src="/ONJE_LOGO.jpeg" alt="ONJE Logo" class="auth-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
+          <h2>ONJE</h2>
           <p class="subtitle">Student Kitchen Order Board</p>
         </div>
-        
+
         <div class="role-selector">
           <button class="role-btn active" data-role="Admin">
             <i class="fa-solid fa-user-shield"></i>
@@ -86,7 +61,7 @@
             <button type="button" class="key-btn" data-val="0">0</button>
             <button type="button" class="key-btn text-success" id="key-submit"><i class="fa-solid fa-circle-check"></i></button>
           </div>
-          
+
           <div id="login-error" class="login-error hidden">
             <i class="fa-solid fa-triangle-exclamation"></i> Invalid PIN
           </div>
@@ -96,14 +71,13 @@
 
     <!-- Main Application Interface -->
     <div id="app-container" class="app-layout hidden">
-      <!-- Sidebar Navigation -->
       <aside class="sidebar">
         <div class="brand">
           <div class="brand-logo-wrapper">
-            <img src="/ONJE_LOGO.jpeg" alt="ÒNJẸ Logo" class="brand-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
+            <img src="/ONJE_LOGO.jpeg" alt="ONJE Logo" class="brand-logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' fill=\'%23FF4D00\'><text y=\'70\' font-size=\'80\'>🍔</text></svg>'">
           </div>
           <div class="brand-info">
-            <span class="brand-name">ÒNJẸ</span>
+            <span class="brand-name">ONJE</span>
             <span class="brand-sub">Student Kitchen</span>
           </div>
         </div>
@@ -144,48 +118,68 @@
         </div>
       </aside>
 
-      <!-- Main Content Area -->
       <main class="main-content">
-        <!-- Top Bar -->
         <header class="top-bar">
           <h1 id="page-title">Orders</h1>
           <div class="header-right">
-            <!-- Connection Status -->
             <div class="db-status-badge online" id="connection-status">
               <span class="pulse-dot"></span>
-              <span class="status-text">Connected</span>
+              <span class="status-text">Local Storage</span>
             </div>
-            <!-- Sync Settings (allows updating database keys) -->
-            <button id="btn-db-settings" class="btn btn-icon" title="Database Settings">
-              <i class="fa-solid fa-database"></i>
+            <button id="btn-chef-settings" class="btn btn-icon" title="Chef WhatsApp">
+              <i class="fa-brands fa-whatsapp"></i>
             </button>
             <div class="clock" id="live-clock">12:00:00 PM</div>
           </div>
         </header>
 
-        <!-- Pages Containers -->
         <div class="page-container">
-          
-          <!-- 1. ORDERS PAGE -->
           <section id="page-orders" class="app-page active">
+            <div class="sales-stats-grid order-stats-grid">
+              <div class="stat-card card">
+                <div class="stat-icon bg-orange-soft">
+                  <i class="fa-solid fa-clipboard-list text-primary"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="label">All-time Orders</span>
+                  <h2 id="orders-stat-total">0</h2>
+                </div>
+              </div>
+              <div class="stat-card card">
+                <div class="stat-icon bg-blue-soft">
+                  <i class="fa-solid fa-bell-concierge text-info"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="label">Active Orders</span>
+                  <h2 id="orders-stat-active">0</h2>
+                </div>
+              </div>
+              <div class="stat-card card">
+                <div class="stat-icon bg-green-soft">
+                  <i class="fa-solid fa-naira-sign text-success"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="label">All-time Sales</span>
+                  <h2 id="orders-stat-sales">&#8358;0</h2>
+                </div>
+              </div>
+            </div>
+
             <div class="grid grid-2-col">
-              <!-- New Order Panel -->
               <div class="card card-glow">
                 <div class="card-header">
                   <h3><i class="fa-solid fa-circle-plus text-primary"></i> Create New Order</h3>
                 </div>
                 <div class="card-body">
-                  <!-- Empty Menu Callout (Shown when menu has no items) -->
                   <div id="empty-menu-callout" class="empty-state hidden">
                     <i class="fa-solid fa-basket-shopping text-muted"></i>
                     <h4>Your menu is empty</h4>
-                    <p>Before you can place an order, you need to add food items to your menu.</p>
+                    <p>Before you can place an order, you need to add items to your menu.</p>
                     <button class="btn btn-primary" id="btn-go-to-menu">
                       <i class="fa-solid fa-plus"></i> Add Menu Items
                     </button>
                   </div>
 
-                  <!-- Order Form -->
                   <form id="order-form">
                     <div class="form-group">
                       <label for="order-customer">Customer Name</label>
@@ -197,9 +191,7 @@
 
                     <div class="form-group">
                       <label>Food & Drinks</label>
-                      <div class="food-checklist-container" id="food-checklist">
-                        <!-- Dynamically filled with menu items -->
-                      </div>
+                      <div class="food-checklist-container" id="food-checklist"></div>
                     </div>
 
                     <div class="form-group">
@@ -214,7 +206,7 @@
                       </div>
                       <div class="summary-row total-row">
                         <span>Total Price:</span>
-                        <span id="summary-total" class="text-primary font-lg">₦0</span>
+                        <span id="summary-total" class="text-primary font-lg">&#8358;0</span>
                       </div>
                     </div>
 
@@ -225,14 +217,12 @@
                 </div>
               </div>
 
-              <!-- Recent Activity & Status Feed -->
               <div class="card flex-column">
                 <div class="card-header">
                   <h3><i class="fa-solid fa-clock-rotate-left"></i> Today's Live Feed</h3>
                 </div>
                 <div class="card-body feed-body">
                   <div id="order-feed-list" class="feed-list">
-                    <!-- Loaded dynamically -->
                     <div class="empty-state">
                       <i class="fa-solid fa-receipt text-muted"></i>
                       <p>No orders placed yet today.</p>
@@ -243,27 +233,24 @@
             </div>
           </section>
 
-          <!-- 2. KITCHEN PAGE -->
           <section id="page-kitchen" class="app-page">
-            <!-- Active Orders Grid -->
             <div class="kitchen-dashboard">
               <div class="kitchen-stats">
                 <div class="stat-mini card">
-                  <span class="label">🟡 Waiting</span>
+                  <span class="label">Waiting</span>
                   <span class="value" id="k-stat-waiting">0</span>
                 </div>
                 <div class="stat-mini card">
-                  <span class="label">🟠 Cooking</span>
+                  <span class="label">Cooking</span>
                   <span class="value text-warning" id="k-stat-cooking">0</span>
                 </div>
                 <div class="stat-mini card">
-                  <span class="label">🟢 Ready</span>
+                  <span class="label">Ready</span>
                   <span class="value text-success" id="k-stat-ready">0</span>
                 </div>
               </div>
 
               <div id="kitchen-orders-grid" class="kitchen-grid">
-                <!-- Dynamically loaded order cards -->
                 <div class="empty-state full-width">
                   <i class="fa-solid fa-fire-burner text-muted"></i>
                   <h4>No Active Kitchen Orders</h4>
@@ -273,13 +260,11 @@
             </div>
           </section>
 
-          <!-- 3. MENU PAGE -->
           <section id="page-menu" class="app-page">
             <div class="grid grid-2-col">
-              <!-- Add Menu Item Panel -->
               <div class="card">
                 <div class="card-header">
-                  <h3><i class="fa-solid fa-plus text-primary"></i> Add Food Item</h3>
+                  <h3><i class="fa-solid fa-plus text-primary"></i> Add Menu Item</h3>
                 </div>
                 <div class="card-body">
                   <form id="menu-item-form">
@@ -288,9 +273,19 @@
                       <input type="text" id="item-name" placeholder="e.g. Jollof Rice, Turkey..." required autocomplete="off">
                     </div>
                     <div class="form-group">
-                      <label for="item-price">Price (₦)</label>
+                      <label for="item-category">Category</label>
+                      <select id="item-category" required>
+                        <option value="Food">Food</option>
+                        <option value="Drink">Drink</option>
+                        <option value="Spice">Spice</option>
+                        <option value="Cream">Cream</option>
+                        <option value="Powder">Powder</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="item-price">Price (&#8358;)</label>
                       <div class="input-icon-wrapper">
-                        <span class="input-prefix">₦</span>
+                        <span class="input-prefix">&#8358;</span>
                         <input type="number" id="item-price" min="0" placeholder="e.g. 2500" required>
                       </div>
                     </div>
@@ -301,7 +296,6 @@
                 </div>
               </div>
 
-              <!-- Menu Items Table -->
               <div class="card">
                 <div class="card-header">
                   <h3><i class="fa-solid fa-list-ul"></i> Active Menu</h3>
@@ -312,14 +306,14 @@
                       <thead>
                         <tr>
                           <th>Item</th>
+                          <th>Category</th>
                           <th>Price</th>
                           <th class="text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody id="menu-items-table-body">
-                        <!-- Loaded dynamically -->
                         <tr>
-                          <td colspan="3" class="text-center p-4 text-muted">No items in menu. Use the form to add some!</td>
+                          <td colspan="4" class="text-center p-4 text-muted">No items in menu. Use the form to add some!</td>
                         </tr>
                       </tbody>
                     </table>
@@ -329,16 +323,14 @@
             </div>
           </section>
 
-          <!-- 4. SALES PAGE -->
           <section id="page-sales" class="app-page">
-            <!-- Sales Stats Cards -->
             <div class="sales-stats-grid">
               <div class="stat-card card">
                 <div class="stat-icon bg-orange-soft">
                   <i class="fa-solid fa-clipboard-list text-primary"></i>
                 </div>
                 <div class="stat-info">
-                  <span class="label">Today's Orders</span>
+                  <span class="label">All-time Orders</span>
                   <h2 id="sales-stat-orders">0</h2>
                 </div>
               </div>
@@ -347,8 +339,17 @@
                   <i class="fa-solid fa-naira-sign text-success"></i>
                 </div>
                 <div class="stat-info">
-                  <span class="label">Today's Revenue</span>
-                  <h2 id="sales-stat-revenue">₦0</h2>
+                  <span class="label">All-time Revenue</span>
+                  <h2 id="sales-stat-revenue">&#8358;0</h2>
+                </div>
+              </div>
+              <div class="stat-card card">
+                <div class="stat-icon bg-blue-soft">
+                  <i class="fa-solid fa-scale-unbalanced text-info"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="label">All-time Costs</span>
+                  <h2 id="sales-stat-costs">&#8358;0</h2>
                 </div>
               </div>
               <div class="stat-card card animate-pulse-orange">
@@ -356,16 +357,71 @@
                   <i class="fa-solid fa-wallet text-info"></i>
                 </div>
                 <div class="stat-info">
-                  <span class="label">Today's Profit (45%)</span>
-                  <h2 id="sales-stat-profit">₦0</h2>
+                  <span class="label">Profit</span>
+                  <h2 id="sales-stat-profit">&#8358;0</h2>
                 </div>
               </div>
             </div>
 
-            <!-- Transaction History Card -->
+            <div class="grid grid-2-col mt-4">
+              <div class="card">
+                <div class="card-header">
+                  <h3><i class="fa-solid fa-money-bill-wave text-primary"></i> Add Cost</h3>
+                </div>
+                <div class="card-body">
+                  <form id="cost-form">
+                    <div class="form-group">
+                      <label for="cost-label">Cost Name</label>
+                      <input type="text" id="cost-label" placeholder="e.g. Gas, Gas refill, Packaging" required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                      <label for="cost-amount">Amount (&#8358;)</label>
+                      <div class="input-icon-wrapper">
+                        <span class="input-prefix">&#8358;</span>
+                        <input type="number" id="cost-amount" min="0" placeholder="e.g. 5000" required>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label for="cost-note">Note</label>
+                      <input type="text" id="cost-note" placeholder="Optional note" autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                      <i class="fa-solid fa-plus"></i> Save Cost
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3><i class="fa-solid fa-receipt text-primary"></i> Cost Log</h3>
+                </div>
+                <div class="card-body p-0">
+                  <div class="table-container">
+                    <table class="sales-table">
+                      <thead>
+                        <tr>
+                          <th>Cost</th>
+                          <th>Amount</th>
+                          <th>Note</th>
+                          <th>Time</th>
+                          <th class="text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cost-history-tbody">
+                        <tr>
+                          <td colspan="5" class="text-center p-4 text-muted">No costs logged yet.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="card mt-4">
               <div class="card-header">
-                <h3><i class="fa-solid fa-history"></i> Today's Transactions</h3>
+                <h3><i class="fa-solid fa-history"></i> All-time Transactions</h3>
               </div>
               <div class="card-body p-0">
                 <div class="table-container">
@@ -377,14 +433,12 @@
                         <th>Customer</th>
                         <th>Items</th>
                         <th>Total</th>
-                        <th>Profit</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody id="sales-history-tbody">
-                      <!-- Loaded dynamically -->
                       <tr>
-                        <td colspan="7" class="text-center p-4 text-muted">No sales logged today yet.</td>
+                        <td colspan="6" class="text-center p-4 text-muted">No sales logged yet.</td>
                       </tr>
                     </tbody>
                   </table>
@@ -392,12 +446,10 @@
               </div>
             </div>
           </section>
-
         </div>
       </main>
     </div>
 
-    <!-- Script Entrypoint -->
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

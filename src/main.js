@@ -1,50 +1,172 @@
 import './style.css'
-import { createClient } from '@supabase/supabase-js'
+
+function showFatalError(message) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#070708;color:#fff;font-family:Outfit,system-ui,sans-serif">
+      <div style="max-width:720px;width:100%;background:#151518;border:1px solid rgba(255,77,0,.25);border-radius:16px;padding:24px;box-shadow:0 0 24px rgba(255,77,0,.12)">
+        <div style="color:#ff4d00;font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">Startup Error</div>
+        <div style="font-size:18px;font-weight:600;margin-bottom:12px">The app failed to render.</div>
+        <pre style="white-space:pre-wrap;word-break:break-word;background:#0e0e11;padding:16px;border-radius:12px;color:#ffb4a0;overflow:auto">${String(message || 'Unknown error')}</pre>
+      </div>
+    </div>
+  `
+}
+
+window.addEventListener('error', event => {
+  showFatalError(event.error?.stack || event.message || 'Unknown error')
+})
+
+window.addEventListener('unhandledrejection', event => {
+  showFatalError(event.reason?.stack || event.reason?.message || String(event.reason || 'Unhandled rejection'))
+})
+
+// --- STORAGE KEYS ---
+const STORAGE_KEYS = {
+  menu: 'onje_menu_items',
+  orders: 'onje_orders',
+  costs: 'onje_cost_entries',
+  settings: 'onje_app_settings'
+}
+
+const MENU_CATEGORIES = ['Food', 'Drink', 'Spice', 'Cream', 'Powder']
 
 // --- APPLICATION STATE ---
-let supabase = null
 let menuItems = []
+let allOrders = []
 let activeOrders = []
 let salesOrders = []
+let costEntries = []
 let currentUser = null
+let inputPin = ''
+let selectedRole = 'Admin'
 
 // PIN Configs
 const PINS = {
-  'Admin': '1234',
-  'Partner': '1234',
-  'Cook': '5555'
+  Admin: '1234',
+  Partner: '1234',
+  Cook: '5555'
 }
 
-// Sound Synthesizer (No assets to load, fully synthesized on the fly)
+function readJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw === null) return fallback
+    return JSON.parse(raw)
+  } catch (err) {
+    console.warn(`Failed to parse stored value for ${key}`, err)
+    return fallback
+  }
+}
+
+function writeJSON(key, value) {
+  localStorage.setItem(key, JSON.stringify(value))
+}
+
+function getSettings() {
+  return {
+    chefWhatsapp: '',
+    ...readJSON(STORAGE_KEYS.settings, {})
+  }
+}
+
+function saveSettings(nextSettings) {
+  writeJSON(STORAGE_KEYS.settings, nextSettings)
+}
+
+function getMenuItems() {
+  const items = readJSON(STORAGE_KEYS.menu, [])
+  return Array.isArray(items) ? items.map(normalizeMenuItem) : []
+}
+
+function saveMenuItems(items) {
+  writeJSON(STORAGE_KEYS.menu, items)
+}
+
+function getOrders() {
+  const orders = readJSON(STORAGE_KEYS.orders, [])
+  return Array.isArray(orders) ? orders.map(normalizeOrder) : []
+}
+
+function saveOrders(orders) {
+  writeJSON(STORAGE_KEYS.orders, orders)
+}
+
+function getCostEntries() {
+  const costs = readJSON(STORAGE_KEYS.costs, [])
+  return Array.isArray(costs) ? costs.map(normalizeCostEntry) : []
+}
+
+function saveCostEntries(entries) {
+  writeJSON(STORAGE_KEYS.costs, entries)
+}
+
+function normalizeMenuItem(item) {
+  return {
+    id: Number(item?.id) || Date.now(),
+    name: String(item?.name || '').trim(),
+    price: Number(item?.price) || 0,
+    category: MENU_CATEGORIES.includes(item?.category) ? item.category : 'Food',
+    created_at: item?.created_at || new Date().toISOString()
+  }
+}
+
+function normalizeOrder(order) {
+  return {
+    id: Number(order?.id) || Date.now(),
+    customer_name: String(order?.customer_name || '').trim(),
+    items: Array.isArray(order?.items) ? order.items : [],
+    notes: order?.notes || null,
+    status: order?.status || 'Waiting',
+    total_price: Number(order?.total_price) || 0,
+    profit: Number(order?.profit) || 0,
+    created_at: order?.created_at || new Date().toISOString()
+  }
+}
+
+function normalizeCostEntry(entry) {
+  return {
+    id: Number(entry?.id) || Date.now(),
+    label: String(entry?.label || 'Expense').trim(),
+    amount: Number(entry?.amount) || 0,
+    note: String(entry?.note || '').trim(),
+    created_at: entry?.created_at || new Date().toISOString()
+  }
+}
+
+function nextOrderId() {
+  const existingIds = allOrders.map(order => Number(order.id) || 0)
+  const maxId = existingIds.length ? Math.max(...existingIds) : 0
+  return maxId + 1
+}
+
+// Sound Synthesizer
 function playNotificationSound(type) {
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
     if (type === 'new_order') {
-      // High double chime
       const osc1 = audioCtx.createOscillator()
       const gain1 = audioCtx.createGain()
       osc1.connect(gain1)
       gain1.connect(audioCtx.destination)
-      osc1.frequency.setValueAtTime(587.33, audioCtx.currentTime) // D5
+      osc1.frequency.setValueAtTime(587.33, audioCtx.currentTime)
       gain1.gain.setValueAtTime(0.08, audioCtx.currentTime)
       gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25)
       osc1.start()
       osc1.stop(audioCtx.currentTime + 0.25)
-      
+
       setTimeout(() => {
         const osc2 = audioCtx.createOscillator()
         const gain2 = audioCtx.createGain()
         osc2.connect(gain2)
         gain2.connect(audioCtx.destination)
-        osc2.frequency.setValueAtTime(698.46, audioCtx.currentTime) // F5
+        osc2.frequency.setValueAtTime(698.46, audioCtx.currentTime)
         gain2.gain.setValueAtTime(0.08, audioCtx.currentTime)
         gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25)
         osc2.start()
         osc2.stop(audioCtx.currentTime + 0.25)
       }, 120)
     } else if (type === 'ready') {
-      // Upward success chord (C5 - E5 - G5 - C6)
-      const freqs = [523.25, 659.25, 783.99, 1046.50]
+      const freqs = [523.25, 659.25, 783.99, 1046.5]
       freqs.forEach((freq, idx) => {
         setTimeout(() => {
           const osc = audioCtx.createOscillator()
@@ -64,145 +186,54 @@ function playNotificationSound(type) {
   }
 }
 
-// --- INITIALIZE DATABASE ---
-function initDatabase() {
-  const envUrl = import.meta.env.VITE_SUPABASE_URL
-  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+function updateConnectionBadge() {
+  const status = document.getElementById('connection-status')
+  if (!status) return
 
-  const localUrl = localStorage.getItem('onje_supabase_url')
-  const localKey = localStorage.getItem('onje_supabase_key')
-
-  const url = envUrl || localUrl
-  const key = envKey || localKey
-
-  if (!url || !key) {
-    // Show setup screen
-    document.getElementById('setup-overlay').classList.remove('hidden')
-    return false
-  }
-
-  try {
-    supabase = createClient(url, key)
-    setupRealtimeSubscriptions()
-    return true
-  } catch (err) {
-    console.error('Supabase initialization failed:', err)
-    alert('Failed to connect to Supabase. Resetting credentials.')
-    localStorage.removeItem('onje_supabase_url')
-    localStorage.removeItem('onje_supabase_key')
-    window.location.reload()
-    return false
-  }
+  status.className = 'db-status-badge online'
+  const label = status.querySelector('.status-text')
+  if (label) label.innerText = 'Local Storage'
 }
 
-// Setup real-time listener for orders and menu
-function setupRealtimeSubscriptions() {
-  if (!supabase) return
+function refreshState() {
+  menuItems = getMenuItems().sort((a, b) => {
+    const categorySort = MENU_CATEGORIES.indexOf(a.category) - MENU_CATEGORIES.indexOf(b.category)
+    if (categorySort !== 0) return categorySort
+    return a.name.localeCompare(b.name)
+  })
 
-  // Subscribe to Orders
-  supabase
-    .channel('orders-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-      console.log('Realtime Order Change:', payload)
-      
-      // Determine if sound should play
-      const oldRecord = payload.old
-      const newRecord = payload.new
-      
-      if (payload.eventType === 'INSERT') {
-        // Play sound for new orders if Cook or Admin
-        playNotificationSound('new_order')
-      } else if (payload.eventType === 'UPDATE' && newRecord.status === 'Ready' && oldRecord.status !== 'Ready') {
-        // Play sound when order is marked Ready (alerting Admins)
-        playNotificationSound('ready')
-      }
-
-      loadData()
-    })
-    .subscribe()
-
-  // Subscribe to Menu changes
-  supabase
-    .channel('menu-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'menu' }, () => {
-      loadData()
-    })
-    .subscribe()
+  allOrders = getOrders().sort((a, b) => Number(a.id) - Number(b.id))
+  activeOrders = allOrders.filter(order => order.status !== 'Delivered')
+  salesOrders = allOrders
+    .filter(order => order.status === 'Delivered')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  costEntries = getCostEntries().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 }
 
-// --- DATA FETCHING ---
-let retryTimeout = null
+function loadData() {
+  refreshState()
+  updateConnectionBadge()
+  renderOrderStats()
+  renderMenuPage()
+  renderOrderFormMenu()
+  renderKitchenPage()
+  renderRecentFeed()
+  renderSalesPage()
+}
 
-async function loadData() {
-  if (!supabase) return
+function getAllTimeRevenue() {
+  return salesOrders.reduce((sum, order) => sum + Number(order.total_price || 0), 0)
+}
 
-  try {
-    document.getElementById('connection-status').className = 'db-status-badge online'
-    document.getElementById('connection-status').querySelector('.status-text').innerText = 'Connected'
+function getAllTimeCosts() {
+  return costEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+}
 
-    // 1. Fetch Menu
-    const { data: menuData, error: menuErr } = await supabase
-      .from('menu')
-      .select('*')
-      .order('name', { ascending: true })
-
-    if (menuErr) throw menuErr
-    menuItems = menuData || []
-    renderMenuPage()
-    renderOrderFormMenu()
-
-    // 2. Fetch Active Orders (Waiting, Cooking, Ready)
-    const { data: activeData, error: activeErr } = await supabase
-      .from('orders')
-      .select('*')
-      .neq('status', 'Delivered')
-      .order('id', { ascending: true })
-
-    if (activeErr) throw activeErr
-    activeOrders = activeData || []
-    renderKitchenPage()
-    renderRecentFeed()
-
-    // 3. Fetch Today's Completed Sales Orders (Delivered today)
-    const todayStart = new Date()
-    todayStart.setHours(0,0,0,0)
-
-    const { data: salesData, error: salesErr } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('status', 'Delivered')
-      .gte('created_at', todayStart.toISOString())
-      .order('created_at', { ascending: false })
-
-    if (salesErr) throw salesErr
-    salesOrders = salesData || []
-    renderSalesPage()
-
-    // Clear any pending retry
-    if (retryTimeout) {
-      clearTimeout(retryTimeout)
-      retryTimeout = null
-    }
-
-  } catch (err) {
-    console.error('Data loading error:', err)
-    document.getElementById('connection-status').className = 'db-status-badge offline'
-    document.getElementById('connection-status').querySelector('.status-text').innerText = 'Reconnecting...'
-    
-    // Schedule a retry if not already scheduled
-    if (!retryTimeout) {
-      retryTimeout = setTimeout(() => {
-        retryTimeout = null
-        loadData()
-      }, 5000)
-    }
-  }
+function getAllTimeProfit() {
+  return getAllTimeRevenue() - getAllTimeCosts()
 }
 
 // --- AUTHENTICATION & LOGIN ---
-let inputPin = ''
-let selectedRole = 'Admin'
-
 function setupLogin() {
   const roleButtons = document.querySelectorAll('.role-btn')
   const pinDots = document.querySelectorAll('.pin-display .dot')
@@ -211,7 +242,6 @@ function setupLogin() {
   const submitButton = document.getElementById('key-submit')
   const errorMsg = document.getElementById('login-error')
 
-  // Check Session Storage for active login
   const savedRole = sessionStorage.getItem('onje_user_role')
   const savedName = sessionStorage.getItem('onje_user_name')
 
@@ -219,7 +249,6 @@ function setupLogin() {
     loginSuccess(savedRole, savedName)
   }
 
-  // Handle Role Selection
   roleButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       roleButtons.forEach(b => b.classList.remove('active'))
@@ -229,15 +258,13 @@ function setupLogin() {
     })
   })
 
-  // Keypad Actions
   keypadButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       if (inputPin.length >= 4) return
       inputPin += btn.getAttribute('data-val')
       errorMsg.classList.add('hidden')
       updatePinDots()
-      
-      // Auto-submit on 4 digits
+
       if (inputPin.length === 4) {
         verifyPin()
       }
@@ -280,8 +307,7 @@ function setupLogin() {
     } else {
       errorMsg.classList.remove('hidden')
       resetPinInput()
-      
-      // Play brief error hum
+
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
         const osc = audioCtx.createOscillator()
@@ -300,74 +326,107 @@ function setupLogin() {
 
 function loginSuccess(role, name) {
   currentUser = { role, name }
-  
-  // Update Profile Panel
+
   document.getElementById('profile-name').innerText = name
   document.getElementById('profile-role').innerText = role === 'Cook' ? 'Kitchen Cook' : 'Administrator'
-  
-  // Configure Access Control
+
   const ordersLink = document.querySelector('.nav-link[data-page="orders"]')
   const menuLink = document.querySelector('.nav-link[data-page="menu"]')
   const salesLink = document.querySelector('.nav-link[data-page="sales"]')
-  const kitchenLink = document.querySelector('.nav-link[data-page="kitchen"]')
 
   if (role === 'Cook') {
-    // Hide administrative links from side bar
     ordersLink.classList.add('hidden')
     menuLink.classList.add('hidden')
     salesLink.classList.add('hidden')
-    
-    // Cook defaults to Kitchen
     switchPage('kitchen')
   } else {
-    // Show all links
     ordersLink.classList.remove('hidden')
     menuLink.classList.remove('hidden')
     salesLink.classList.remove('hidden')
-    
     switchPage('orders')
   }
 
-  // Fade out login overlay
   document.getElementById('login-overlay').classList.add('hidden')
   document.getElementById('app-container').classList.remove('hidden')
 
-  // Load backend data
   loadData()
 }
 
-// --- SETUP FORM (SUPABASE BACKUP) ---
-document.getElementById('setup-form').addEventListener('submit', (e) => {
-  e.preventDefault()
-  const url = document.getElementById('setup-url').value.trim()
-  const key = document.getElementById('setup-key').value.trim()
+// --- CHEF WHATSAPP HELPERS ---
+function sanitizePhoneNumber(value) {
+  return String(value || '').replace(/\D/g, '')
+}
 
-  if (url && key) {
-    localStorage.setItem('onje_supabase_url', url)
-    localStorage.setItem('onje_supabase_key', key)
-    document.getElementById('setup-overlay').classList.add('hidden')
-    window.location.reload()
-  }
-})
+function getChefWhatsappNumber(promptIfMissing = false) {
+  const settings = getSettings()
+  const saved = sanitizePhoneNumber(settings.chefWhatsapp)
 
-// Database settings modal trigger
-document.getElementById('btn-db-settings').addEventListener('click', () => {
-  if (confirm('Do you want to reset your database connection details?')) {
-    localStorage.removeItem('onje_supabase_url')
-    localStorage.removeItem('onje_supabase_key')
-    sessionStorage.clear()
-    window.location.reload()
+  if (saved) return saved
+  if (!promptIfMissing) return ''
+
+  const input = window.prompt('Enter the chef WhatsApp number with country code, for example 2348012345678')
+  if (!input) return ''
+
+  const cleaned = sanitizePhoneNumber(input)
+  if (!cleaned) {
+    alert('Please enter a valid WhatsApp number.')
+    return ''
   }
-})
+
+  saveSettings({
+    ...settings,
+    chefWhatsapp: cleaned
+  })
+
+  return cleaned
+}
+
+function buildChefMessage(order) {
+  const orderedAt = new Date(order.created_at).toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
+
+  const itemsText = order.items
+    .map(item => `- ${item.quantity} x ${item.name} (${item.category || 'Food'})`)
+    .join('\n')
+
+  return [
+    `New Order #${order.id}`,
+    `Customer: ${order.customer_name}`,
+    `Time: ${orderedAt}`,
+    '',
+    'Items:',
+    itemsText,
+    '',
+    `Notes: ${order.notes || 'None'}`,
+    `Total: NGN ${Number(order.total_price).toLocaleString()}`,
+    `Status: ${order.status}`
+  ].join('\n')
+}
+
+function sendOrderToChef(order) {
+  const phone = getChefWhatsappNumber(true)
+  if (!phone) return false
+
+  const message = buildChefMessage(order)
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+  const win = window.open(url, '_blank', 'noopener,noreferrer')
+
+  if (!win) {
+    alert('Your browser blocked the WhatsApp window. Please allow popups for this site.')
+    return false
+  }
+
+  return true
+}
 
 // --- PAGE ROUTING ---
 function switchPage(pageId) {
-  // Guard role navigation
   if (currentUser?.role === 'Cook' && pageId !== 'kitchen') {
     pageId = 'kitchen'
   }
 
-  // Update navbar styling
   document.querySelectorAll('.nav-link').forEach(link => {
     if (link.getAttribute('data-page') === pageId) {
       link.classList.add('active')
@@ -376,7 +435,6 @@ function switchPage(pageId) {
     }
   })
 
-  // Update visible sections
   document.querySelectorAll('.app-page').forEach(page => {
     if (page.id === `page-${pageId}`) {
       page.classList.add('active')
@@ -385,105 +443,60 @@ function switchPage(pageId) {
     }
   })
 
-  // Update page header text
-  document.getElementById('page-title').innerText = pageId
+  const titleMap = {
+    orders: 'Orders',
+    kitchen: 'Kitchen',
+    menu: 'Menu',
+    sales: 'Sales'
+  }
+  document.getElementById('page-title').innerText = titleMap[pageId] || pageId
 
-  // Trigger page specific renders if needed
   if (pageId === 'sales') {
     renderSalesPage()
   }
 }
 
-// Event Listeners for Nav Link switches
-document.querySelectorAll('.nav-link').forEach(link => {
-  link.addEventListener('click', (e) => {
-    e.preventDefault()
-    const page = link.getAttribute('data-page')
-    switchPage(page)
-  })
-})
-
-// Logout Logic
-document.getElementById('logout-btn').addEventListener('click', () => {
-  if (confirm('Log out of ÒNJẸ?')) {
-    sessionStorage.removeItem('onje_user_role')
-    sessionStorage.removeItem('onje_user_name')
-    document.getElementById('app-container').classList.add('hidden')
-    document.getElementById('login-overlay').classList.remove('hidden')
-    // Reset key entry
-    inputPin = ''
-    document.querySelectorAll('.pin-display .dot').forEach(d => d.classList.remove('filled'))
-    document.getElementById('login-error').classList.add('hidden')
-  }
-})
-
 // --- MENU MANAGEMENT ---
-const addMenuItemForm = document.getElementById('menu-item-form')
-
-addMenuItemForm.addEventListener('submit', async (e) => {
-  e.preventDefault()
-  if (!supabase) return
-
-  const nameInput = document.getElementById('item-name')
-  const priceInput = document.getElementById('item-price')
-  
-  const name = nameInput.value.trim()
-  const price = parseFloat(priceInput.value)
-
-  if (!name || isNaN(price)) return
-
-  try {
-    const { error } = await supabase
-      .from('menu')
-      .insert([{ name, price }])
-
-    if (error) throw error
-
-    nameInput.value = ''
-    priceInput.value = ''
-    loadData()
-  } catch (err) {
-    console.error('Error adding menu item:', err)
-    alert('Failed to add item: ' + err.message)
-  }
-})
-
 function renderMenuPage() {
   const tbody = document.getElementById('menu-items-table-body')
-  
+
   if (menuItems.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="3" class="text-center p-4 text-muted">No items in menu. Use the form on the left to add food or drinks!</td>
+        <td colspan="4" class="text-center p-4 text-muted">No items in menu. Use the form on the left to add food, drinks, spices, creams, or powders!</td>
       </tr>
     `
     return
   }
 
-  tbody.innerHTML = menuItems.map(item => `
-    <tr data-id="${item.id}">
-      <td class="food-name font-lg">${item.name}</td>
-      <td class="price-cell">
-        <span class="view-price text-primary">₦${parseFloat(item.price).toLocaleString()}</span>
-        <input type="number" class="edit-input hidden" value="${item.price}" min="0">
-      </td>
-      <td class="text-right">
-        <div class="menu-actions">
-          <button class="btn btn-secondary btn-icon btn-edit" title="Edit Price">
-            <i class="fa-solid fa-pencil"></i>
-          </button>
-          <button class="btn btn-primary btn-icon btn-save hidden" title="Save Price">
-            <i class="fa-solid fa-check"></i>
-          </button>
-          <button class="btn btn-danger btn-icon btn-delete" title="Delete Item">
-            <i class="fa-solid fa-trash-can"></i>
-          </button>
-        </div>
-      </td>
-    </tr>
-  `).join('')
+  tbody.innerHTML = menuItems
+    .map(item => `
+      <tr data-id="${item.id}">
+        <td class="food-name font-lg">
+          <div class="menu-item-name">${item.name}</div>
+          <span class="menu-category-pill">${item.category}</span>
+        </td>
+        <td class="price-cell">
+          <span class="view-price text-primary">&#8358;${Number(item.price).toLocaleString()}</span>
+          <input type="number" class="edit-input hidden" value="${item.price}" min="0">
+        </td>
+        <td class="text-right">
+          <div class="menu-actions">
+            <button class="btn btn-secondary btn-icon btn-edit" title="Edit Price">
+              <i class="fa-solid fa-pencil"></i>
+            </button>
+            <button class="btn btn-primary btn-icon btn-save hidden" title="Save Price">
+              <i class="fa-solid fa-check"></i>
+            </button>
+            <button class="btn btn-danger btn-icon btn-delete" title="Delete Item">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `)
+    .join('')
 
-  // Bind edit action listeners
   tbody.querySelectorAll('tr').forEach(row => {
     const id = row.getAttribute('data-id')
     const viewPrice = row.querySelector('.view-price')
@@ -500,46 +513,122 @@ function renderMenuPage() {
       editInput.focus()
     })
 
-    btnSave.addEventListener('click', async () => {
+    btnSave.addEventListener('click', () => {
       const newPrice = parseFloat(editInput.value)
-      if (isNaN(newPrice) || newPrice < 0) return
+      if (Number.isNaN(newPrice) || newPrice < 0) return
 
-      try {
-        const { error } = await supabase
-          .from('menu')
-          .update({ price: newPrice })
-          .eq('id', id)
+      menuItems = menuItems.map(item => {
+        if (String(item.id) !== String(id)) return item
+        return { ...item, price: newPrice }
+      })
 
-        if (error) throw error
-        loadData()
-      } catch (err) {
-        console.error('Error updating price:', err)
-        alert('Update failed: ' + err.message)
-      }
+      saveMenuItems(menuItems)
+      loadData()
     })
 
-    // Pressing Enter saves
-    editInput.addEventListener('keydown', (e) => {
+    editInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         btnSave.click()
       }
     })
 
-    btnDelete.addEventListener('click', async () => {
+    btnDelete.addEventListener('click', () => {
       if (!confirm('Are you sure you want to delete this menu item?')) return
-      try {
-        const { error } = await supabase
-          .from('menu')
-          .delete()
-          .eq('id', id)
 
-        if (error) throw error
-        loadData()
-      } catch (err) {
-        console.error('Error deleting menu item:', err)
-        alert('Delete failed: ' + err.message)
-      }
+      menuItems = menuItems.filter(item => String(item.id) !== String(id))
+      saveMenuItems(menuItems)
+      loadData()
     })
+  })
+}
+
+function bindChefSettingsButton() {
+  const button = document.getElementById('btn-chef-settings')
+  if (!button) return
+
+  button.addEventListener('click', () => {
+    const current = getSettings().chefWhatsapp
+    const next = window.prompt('Enter the chef WhatsApp number with country code', current)
+    if (next === null) return
+
+    const cleaned = sanitizePhoneNumber(next)
+    if (!cleaned) {
+      alert('Please enter a valid WhatsApp number.')
+      return
+    }
+
+    saveSettings({
+      ...getSettings(),
+      chefWhatsapp: cleaned
+    })
+
+    alert('Chef WhatsApp number saved.')
+  })
+}
+
+const addMenuItemForm = document.getElementById('menu-item-form')
+if (addMenuItemForm) {
+  addMenuItemForm.addEventListener('submit', e => {
+    e.preventDefault()
+
+    const nameInput = document.getElementById('item-name')
+    const priceInput = document.getElementById('item-price')
+    const categoryInput = document.getElementById('item-category')
+
+    const name = nameInput.value.trim()
+    const price = parseFloat(priceInput.value)
+    const category = categoryInput.value
+
+    if (!name || Number.isNaN(price)) return
+
+    const nextItem = normalizeMenuItem({
+      id: Date.now(),
+      name,
+      price,
+      category,
+      created_at: new Date().toISOString()
+    })
+
+    menuItems = [...menuItems, nextItem]
+    saveMenuItems(menuItems)
+
+    nameInput.value = ''
+    priceInput.value = ''
+    categoryInput.value = 'Food'
+    loadData()
+  })
+}
+
+const costForm = document.getElementById('cost-form')
+if (costForm) {
+  costForm.addEventListener('submit', e => {
+    e.preventDefault()
+
+    const labelInput = document.getElementById('cost-label')
+    const amountInput = document.getElementById('cost-amount')
+    const noteInput = document.getElementById('cost-note')
+
+    const label = labelInput.value.trim()
+    const amount = parseFloat(amountInput.value)
+    const note = noteInput.value.trim()
+
+    if (!label || Number.isNaN(amount)) return
+
+    const entry = normalizeCostEntry({
+      id: Date.now(),
+      label,
+      amount,
+      note,
+      created_at: new Date().toISOString()
+    })
+
+    costEntries = [...costEntries, entry]
+    saveCostEntries(costEntries)
+
+    labelInput.value = ''
+    amountInput.value = ''
+    noteInput.value = ''
+    loadData()
   })
 }
 
@@ -549,10 +638,12 @@ function renderOrderFormMenu() {
   const form = document.getElementById('order-form')
   const emptyCallout = document.getElementById('empty-menu-callout')
 
-  // Quick link helper
-  document.getElementById('btn-go-to-menu').onclick = (e) => {
-    e.preventDefault()
-    switchPage('menu')
+  const goToMenuButton = document.getElementById('btn-go-to-menu')
+  if (goToMenuButton) {
+    goToMenuButton.onclick = e => {
+      e.preventDefault()
+      switchPage('menu')
+    }
   }
 
   if (menuItems.length === 0) {
@@ -566,23 +657,27 @@ function renderOrderFormMenu() {
   form.classList.remove('hidden')
   emptyCallout.classList.add('hidden')
 
-  checklist.innerHTML = menuItems.map(item => `
-    <div class="food-check-row" data-id="${item.id}" data-price="${item.price}">
-      <label class="food-check-label">
-        <input type="checkbox" class="food-checkbox">
-        <span class="custom-checkbox"></span>
-        <span class="food-name">${item.name}</span>
-      </label>
-      <div class="qty-control">
-        <button type="button" class="qty-btn qty-minus"><i class="fa-solid fa-minus"></i></button>
-        <span class="qty-val">1</span>
-        <button type="button" class="qty-btn qty-plus"><i class="fa-solid fa-plus"></i></button>
+  checklist.innerHTML = menuItems
+    .map(item => `
+      <div class="food-check-row" data-id="${item.id}" data-price="${item.price}" data-category="${item.category}">
+        <label class="food-check-label">
+          <input type="checkbox" class="food-checkbox">
+          <span class="custom-checkbox"></span>
+          <span class="food-label-stack">
+            <span class="food-name">${item.name}</span>
+            <span class="menu-category-pill">${item.category}</span>
+          </span>
+        </label>
+        <div class="qty-control">
+          <button type="button" class="qty-btn qty-minus"><i class="fa-solid fa-minus"></i></button>
+          <span class="qty-val">1</span>
+          <button type="button" class="qty-btn qty-plus"><i class="fa-solid fa-plus"></i></button>
+        </div>
+        <span class="food-price font-lg text-primary">&#8358;${Number(item.price).toLocaleString()}</span>
       </div>
-      <span class="food-price font-lg text-primary">₦${parseFloat(item.price).toLocaleString()}</span>
-    </div>
-  `).join('')
+    `)
+    .join('')
 
-  // Bind checkbox events & quantity selectors
   checklist.querySelectorAll('.food-check-row').forEach(row => {
     const checkbox = row.querySelector('.food-checkbox')
     const qtyVal = row.querySelector('.qty-val')
@@ -594,14 +689,14 @@ function renderOrderFormMenu() {
         row.classList.add('checked')
       } else {
         row.classList.remove('checked')
-        qtyVal.innerText = '1' // reset
+        qtyVal.innerText = '1'
       }
       updateOrderTotal()
     })
 
-    btnMinus.addEventListener('click', (e) => {
+    btnMinus.addEventListener('click', e => {
       e.stopPropagation()
-      let qty = parseInt(qtyVal.innerText)
+      let qty = parseInt(qtyVal.innerText, 10)
       if (qty > 1) {
         qty--
         qtyVal.innerText = qty
@@ -609,9 +704,9 @@ function renderOrderFormMenu() {
       }
     })
 
-    btnPlus.addEventListener('click', (e) => {
+    btnPlus.addEventListener('click', e => {
       e.stopPropagation()
-      let qty = parseInt(qtyVal.innerText)
+      let qty = parseInt(qtyVal.innerText, 10)
       qty++
       qtyVal.innerText = qty
       updateOrderTotal()
@@ -622,83 +717,83 @@ function renderOrderFormMenu() {
 function updateOrderTotal() {
   let total = 0
   let itemsCount = 0
-  
+
   document.querySelectorAll('.food-check-row').forEach(row => {
     const checkbox = row.querySelector('.food-checkbox')
     if (checkbox.checked) {
       const price = parseFloat(row.getAttribute('data-price'))
-      const qty = parseInt(row.querySelector('.qty-val').innerText)
+      const qty = parseInt(row.querySelector('.qty-val').innerText, 10)
       total += price * qty
       itemsCount += qty
     }
   })
 
   document.getElementById('summary-items-count').innerText = itemsCount
-  document.getElementById('summary-total').innerText = `₦${total.toLocaleString()}`
+  document.getElementById('summary-total').innerHTML = `&#8358;${total.toLocaleString()}`
   return total
 }
 
-// Handle order submissions
-document.getElementById('order-form').addEventListener('submit', async (e) => {
-  e.preventDefault()
-  if (!supabase) return
-
-  const customerName = document.getElementById('order-customer').value.trim()
-  const notes = document.getElementById('order-notes').value.trim()
-
-  if (!customerName) return
-
-  const items = []
+function resetOrderForm() {
+  document.getElementById('order-customer').value = ''
+  document.getElementById('order-notes').value = ''
   document.querySelectorAll('.food-check-row').forEach(row => {
-    const checkbox = row.querySelector('.food-checkbox')
-    if (checkbox.checked) {
-      const name = row.querySelector('.food-name').innerText
-      const price = parseFloat(row.getAttribute('data-price'))
-      const quantity = parseInt(row.querySelector('.qty-val').innerText)
-      items.push({ name, price, quantity })
-    }
+    row.classList.remove('checked')
+    row.querySelector('.food-checkbox').checked = false
+    row.querySelector('.qty-val').innerText = '1'
   })
+  updateOrderTotal()
+}
 
-  if (items.length === 0) {
-    alert('Please select at least one item!')
-    return
-  }
+const orderForm = document.getElementById('order-form')
+if (orderForm) {
+  orderForm.addEventListener('submit', e => {
+    e.preventDefault()
 
-  const totalPrice = updateOrderTotal()
-  // Profit calculation: 45% (Option A)
-  const profit = totalPrice * 0.45
+    const customerName = document.getElementById('order-customer').value.trim()
+    const notes = document.getElementById('order-notes').value.trim()
 
-  try {
-    const { error } = await supabase
-      .from('orders')
-      .insert([{
-        customer_name: customerName,
-        items,
-        notes: notes || null,
-        status: 'Waiting',
-        total_price: totalPrice,
-        profit: profit
-      }])
+    if (!customerName) return
 
-    if (error) throw error
-
-    // Success reset
-    document.getElementById('order-customer').value = ''
-    document.getElementById('order-notes').value = ''
+    const items = []
     document.querySelectorAll('.food-check-row').forEach(row => {
-      row.classList.remove('checked')
-      row.querySelector('.food-checkbox').checked = false
-      row.querySelector('.qty-val').innerText = '1'
+      const checkbox = row.querySelector('.food-checkbox')
+      if (checkbox.checked) {
+        const name = row.querySelector('.food-name').innerText
+        const price = parseFloat(row.getAttribute('data-price'))
+        const quantity = parseInt(row.querySelector('.qty-val').innerText, 10)
+        const category = row.getAttribute('data-category') || 'Food'
+        items.push({ name, price, quantity, category })
+      }
     })
-    updateOrderTotal()
-    
-    // Open a visual confirmation overlay or show notifications
+
+    if (items.length === 0) {
+      alert('Please select at least one item!')
+      return
+    }
+
+    const totalPrice = updateOrderTotal()
+    const profit = totalPrice * 0.45
+
+    const order = normalizeOrder({
+      id: nextOrderId(),
+      customer_name: customerName,
+      items,
+      notes: notes || null,
+      status: 'Waiting',
+      total_price: totalPrice,
+      profit,
+      created_at: new Date().toISOString()
+    })
+
+    allOrders = [...allOrders, order]
+    saveOrders(allOrders)
+
+    resetOrderForm()
     loadData()
-  } catch (err) {
-    console.error('Error creating order:', err)
-    alert('Failed to place order: ' + err.message)
-  }
-})
+    playNotificationSound('new_order')
+    sendOrderToChef(order)
+  })
+}
 
 // --- RENDER LIVE FEED ON ORDERS TAB ---
 function renderRecentFeed() {
@@ -713,44 +808,60 @@ function renderRecentFeed() {
     return
   }
 
-  container.innerHTML = activeOrders.map(order => {
-    const time = new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    const itemsSummary = order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')
-    const statusClass = order.status.toLowerCase()
-    
-    return `
-      <div class="feed-item status-${statusClass}">
-        <div class="feed-info">
-          <span class="feed-title">ORDER #${order.id} • ${order.customer_name}</span>
-          <span class="feed-desc text-muted">${itemsSummary}</span>
-          <span class="feed-time"><i class="fa-regular fa-clock"></i> ${time}</span>
+  container.innerHTML = activeOrders
+    .slice()
+    .reverse()
+    .map(order => {
+      const time = new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const itemsSummary = order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')
+      const statusClass = order.status.toLowerCase()
+
+      return `
+        <div class="feed-item status-${statusClass}">
+          <div class="feed-info">
+            <span class="feed-title">ORDER #${order.id} • ${order.customer_name}</span>
+            <span class="feed-desc text-muted">${itemsSummary}</span>
+            <span class="feed-time"><i class="fa-regular fa-clock"></i> ${time}</span>
+          </div>
+          <span class="feed-status-badge ${statusClass}">${order.status}</span>
         </div>
-        <span class="feed-status-badge ${statusClass}">${order.status}</span>
-      </div>
-    `
-  }).join('')
+      `
+    })
+    .join('')
+}
+
+function renderOrderStats() {
+  const allTimeOrderCount = allOrders.length
+  const activeOrderCount = activeOrders.length
+  const allTimeSalesTotal = getAllTimeRevenue()
+
+  const totalEl = document.getElementById('orders-stat-total')
+  const activeEl = document.getElementById('orders-stat-active')
+  const salesEl = document.getElementById('orders-stat-sales')
+
+  if (totalEl) totalEl.innerText = allTimeOrderCount
+  if (activeEl) activeEl.innerText = activeOrderCount
+  if (salesEl) salesEl.innerHTML = `&#8358;${allTimeSalesTotal.toLocaleString()}`
 }
 
 // --- KITCHEN OPERATIONS ---
 function renderKitchenPage() {
   const grid = document.getElementById('kitchen-orders-grid')
-  
-  // Update stats counters
+
   let countWaiting = 0
   let countCooking = 0
   let countReady = 0
 
-  activeOrders.forEach(o => {
-    if (o.status === 'Waiting') countWaiting++
-    if (o.status === 'Cooking') countCooking++
-    if (o.status === 'Ready') countReady++
+  activeOrders.forEach(order => {
+    if (order.status === 'Waiting') countWaiting++
+    if (order.status === 'Cooking') countCooking++
+    if (order.status === 'Ready') countReady++
   })
 
   document.getElementById('k-stat-waiting').innerText = countWaiting
   document.getElementById('k-stat-cooking').innerText = countCooking
   document.getElementById('k-stat-ready').innerText = countReady
-  
-  // Kitchen count badge in sidebar
+
   const totalKitchenCount = countWaiting + countCooking + countReady
   const countBadge = document.getElementById('kitchen-count-badge')
   if (totalKitchenCount > 0) {
@@ -771,98 +882,116 @@ function renderKitchenPage() {
     return
   }
 
-  grid.innerHTML = activeOrders.map(order => {
-    const time = new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    const itemsHtml = order.items.map((i, index) => `
-      <div class="k-item-row">
-        <i class="fa-regular fa-circle-check k-item-check" data-order="${order.id}" data-idx="${index}"></i>
-        <span class="k-qty">${i.quantity}x</span>
-        <span>${i.name}</span>
-      </div>
-    `).join('')
+  grid.innerHTML = activeOrders
+    .slice()
+    .reverse()
+    .map(order => {
+      const time = new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const itemsHtml = order.items
+        .map((item, index) => `
+          <div class="k-item-row">
+            <i class="fa-regular fa-circle-check k-item-check" data-order="${order.id}" data-idx="${index}"></i>
+            <span class="k-qty">${item.quantity}x</span>
+            <span>${item.name}</span>
+          </div>
+        `)
+        .join('')
 
-    const notesHtml = order.notes ? `<div class="k-notes-box"><i class="fa-solid fa-comment-dots text-primary"></i> "${order.notes}"</div>` : ''
-    const statusClass = order.status.toLowerCase()
-    
-    // Render status specific actions
-    let actionBtnHtml = ''
-    if (order.status === 'Waiting') {
-      actionBtnHtml = `<button class="btn btn-primary btn-block btn-lg btn-status-change" data-id="${order.id}" data-next="Cooking">
-        <i class="fa-solid fa-fire-burner"></i> Start Cooking
-      </button>`
-    } else if (order.status === 'Cooking') {
-      actionBtnHtml = `<button class="btn btn-primary btn-block btn-lg btn-status-change" style="background: linear-gradient(135deg, var(--warning) 0%, #FF8800 100%)" data-id="${order.id}" data-next="Ready">
-        <i class="fa-solid fa-bell"></i> Ready
-      </button>`
-    } else if (order.status === 'Ready') {
-      if (currentUser?.role === 'Cook') {
-        actionBtnHtml = `<div class="text-center text-muted p-2 font-lg"><i class="fa-solid fa-clock-rotate-left"></i> Waiting for pickup</div>`
-      } else {
-        // Only Admin or Partner can Deliver/Collect and Archive
-        actionBtnHtml = `<button class="btn btn-primary btn-block btn-lg btn-status-change" style="background: linear-gradient(135deg, var(--success) 0%, #00C853 100%)" data-id="${order.id}" data-next="Delivered">
-          <i class="fa-solid fa-hand-holding-hand"></i> Collect & Deliver
+      const notesHtml = order.notes
+        ? `<div class="k-notes-box"><i class="fa-solid fa-comment-dots text-primary"></i> "${order.notes}"</div>`
+        : ''
+
+      const statusClass = order.status.toLowerCase()
+
+      let actionBtnHtml = ''
+      if (order.status === 'Waiting') {
+        actionBtnHtml = `<button class="btn btn-primary btn-block btn-lg btn-status-change" data-id="${order.id}" data-next="Cooking">
+          <i class="fa-solid fa-fire-burner"></i> Start Cooking
         </button>`
+      } else if (order.status === 'Cooking') {
+        actionBtnHtml = `<button class="btn btn-primary btn-block btn-lg btn-status-change" style="background: linear-gradient(135deg, var(--warning) 0%, #FF8800 100%)" data-id="${order.id}" data-next="Ready">
+          <i class="fa-solid fa-bell"></i> Ready
+        </button>`
+      } else if (order.status === 'Ready') {
+        if (currentUser?.role === 'Cook') {
+          actionBtnHtml = `<div class="text-center text-muted p-2 font-lg"><i class="fa-solid fa-clock-rotate-left"></i> Waiting for pickup</div>`
+        } else {
+          actionBtnHtml = `<button class="btn btn-primary btn-block btn-lg btn-status-change" style="background: linear-gradient(135deg, var(--success) 0%, #00C853 100%)" data-id="${order.id}" data-next="Delivered">
+            <i class="fa-solid fa-hand-holding-hand"></i> Collect & Deliver
+          </button>`
+        }
       }
-    }
 
-    return `
-      <div class="kitchen-card status-${statusClass}" data-id="${order.id}">
-        <div class="k-card-header">
-          <span class="k-order-num">ORDER #${order.id}</span>
-          <span class="k-order-time"><i class="fa-regular fa-clock"></i> ${time}</span>
-        </div>
-        
-        <div class="k-customer-section">
-          <span class="label">Customer</span>
-          <span class="k-customer-name">${order.customer_name}</span>
-        </div>
+      const whatsappBtnHtml = `<button class="btn btn-secondary btn-block btn-whatsapp-order" data-id="${order.id}">
+        <i class="fa-brands fa-whatsapp"></i> Send to Chef
+      </button>`
 
-        <div class="k-items-section">
-          <span class="label">Items</span>
-          <div class="k-items-list">
-            ${itemsHtml}
+      return `
+        <div class="kitchen-card status-${statusClass}" data-id="${order.id}">
+          <div class="k-card-header">
+            <span class="k-order-num">ORDER #${order.id}</span>
+            <span class="k-order-time"><i class="fa-regular fa-clock"></i> ${time}</span>
+          </div>
+
+          <div class="k-customer-section">
+            <span class="label">Customer</span>
+            <span class="k-customer-name">${order.customer_name}</span>
+          </div>
+
+          <div class="k-items-section">
+            <span class="label">Items</span>
+            <div class="k-items-list">
+              ${itemsHtml}
+            </div>
+          </div>
+
+          ${notesHtml}
+
+          <div class="k-status-box">
+            <span class="label">Status</span>
+            <span class="k-status-indicator status-${statusClass}">
+              <i class="fa-solid ${order.status === 'Waiting' ? 'fa-hourglass' : order.status === 'Cooking' ? 'fa-fire-burner' : 'fa-circle-check'}"></i>
+              ${order.status}
+            </span>
+          </div>
+
+          <div class="k-action-section">
+            ${actionBtnHtml}
+            ${whatsappBtnHtml}
           </div>
         </div>
+      `
+    })
+    .join('')
 
-        ${notesHtml}
-
-        <div class="k-status-box">
-          <span class="label">Status</span>
-          <span class="k-status-indicator status-${statusClass}">
-            <i class="fa-solid ${order.status === 'Waiting' ? 'fa-hourglass' : order.status === 'Cooking' ? 'fa-fire-burner' : 'fa-circle-check'}"></i>
-            ${order.status}
-          </span>
-        </div>
-
-        <div class="k-action-section">
-          ${actionBtnHtml}
-        </div>
-      </div>
-    `
-  }).join('')
-
-  // Bind change events
   grid.querySelectorAll('.btn-status-change').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-id')
       const nextStatus = btn.getAttribute('data-next')
-      
-      try {
-        const { error } = await supabase
-          .from('orders')
-          .update({ status: nextStatus })
-          .eq('id', id)
 
-        if (error) throw error
-        loadData()
-      } catch (err) {
-        console.error('Error changing order status:', err)
-        alert('Failed to change status: ' + err.message)
-      }
+      allOrders = allOrders.map(order => {
+        if (String(order.id) !== String(id)) return order
+        const updated = { ...order, status: nextStatus }
+        if (nextStatus === 'Ready' && order.status !== 'Ready') {
+          playNotificationSound('ready')
+        }
+        return updated
+      })
+
+      saveOrders(allOrders)
+      loadData()
     })
   })
 
-  // Kitchen checklists for the cook (interactively cross items off check list)
+  grid.querySelectorAll('.btn-whatsapp-order').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id')
+      const order = allOrders.find(item => String(item.id) === String(id))
+      if (!order) return
+      sendOrderToChef(order)
+    })
+  })
+
   grid.querySelectorAll('.k-item-check').forEach(check => {
     check.addEventListener('click', () => {
       check.classList.toggle('fa-regular')
@@ -874,46 +1003,87 @@ function renderKitchenPage() {
 
 // --- SALES REPORTING ---
 function renderSalesPage() {
-  // Update stats counters
-  let totalRevenue = 0
-  let totalProfit = 0
   const ordersCount = salesOrders.length
-
-  salesOrders.forEach(o => {
-    totalRevenue += parseFloat(o.total_price)
-    totalProfit += parseFloat(o.profit)
-  })
+  const totalRevenue = getAllTimeRevenue()
+  const totalCosts = getAllTimeCosts()
+  const totalProfit = getAllTimeProfit()
 
   document.getElementById('sales-stat-orders').innerText = ordersCount
-  document.getElementById('sales-stat-revenue').innerText = `₦${totalRevenue.toLocaleString()}`
-  document.getElementById('sales-stat-profit').innerText = `₦${totalProfit.toLocaleString()}`
+  document.getElementById('sales-stat-revenue').innerHTML = `&#8358;${totalRevenue.toLocaleString()}`
+  document.getElementById('sales-stat-costs').innerHTML = `&#8358;${totalCosts.toLocaleString()}`
+  document.getElementById('sales-stat-profit').innerHTML = `&#8358;${totalProfit.toLocaleString()}`
 
-  // Render Table History
   const tbody = document.getElementById('sales-history-tbody')
   if (salesOrders.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center p-4 text-muted">No sales logged today yet. Mark orders "Delivered" on the Kitchen tab to see sales stats.</td>
+        <td colspan="6" class="text-center p-4 text-muted">No sales logged yet. Mark orders "Delivered" on the Kitchen tab to see sales stats.</td>
       </tr>
     `
     return
   }
 
-  tbody.innerHTML = salesOrders.map(order => {
-    const time = new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    const itemsSummary = order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')
-    return `
+  tbody.innerHTML = salesOrders
+    .map(order => {
+      const time = new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const itemsSummary = order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')
+      return `
+        <tr>
+          <td class="text-primary font-lg">#${order.id}</td>
+          <td class="text-muted">${time}</td>
+          <td class="font-lg">${order.customer_name}</td>
+          <td>${itemsSummary}</td>
+          <td>&#8358;${Number(order.total_price).toLocaleString()}</td>
+          <td><span class="feed-status-badge delivered">${order.status}</span></td>
+        </tr>
+      `
+    })
+    .join('')
+
+  renderCostLog()
+}
+
+function renderCostLog() {
+  const tbody = document.getElementById('cost-history-tbody')
+  if (!tbody) return
+
+  if (costEntries.length === 0) {
+    tbody.innerHTML = `
       <tr>
-        <td class="text-primary font-lg">#${order.id}</td>
-        <td class="text-muted">${time}</td>
-        <td class="font-lg">${order.customer_name}</td>
-        <td>${itemsSummary}</td>
-        <td>₦${parseFloat(order.total_price).toLocaleString()}</td>
-        <td class="text-success font-lg">₦${parseFloat(order.profit).toLocaleString()}</td>
-        <td><span class="feed-status-badge delivered">${order.status}</span></td>
+        <td colspan="5" class="text-center p-4 text-muted">No costs logged yet.</td>
       </tr>
     `
-  }).join('')
+    return
+  }
+
+  tbody.innerHTML = costEntries
+    .map(entry => {
+      const time = new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return `
+        <tr data-id="${entry.id}">
+          <td class="font-lg">${entry.label}</td>
+          <td class="text-danger font-lg">&#8358;${Number(entry.amount).toLocaleString()}</td>
+          <td>${entry.note || '<span class="text-muted">-</span>'}</td>
+          <td class="text-muted">${time}</td>
+          <td class="text-right">
+            <button class="btn btn-danger btn-icon btn-delete-cost" data-id="${entry.id}" title="Delete Cost">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        </tr>
+      `
+    })
+    .join('')
+
+  tbody.querySelectorAll('.btn-delete-cost').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id')
+      if (!confirm('Delete this cost entry?')) return
+      costEntries = costEntries.filter(entry => String(entry.id) !== String(id))
+      saveCostEntries(costEntries)
+      loadData()
+    })
+  })
 }
 
 // --- LIVE CLOCK ---
@@ -925,13 +1095,60 @@ function startClock() {
   }, 1000)
 }
 
+function bindSharedControls() {
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault()
+      const page = link.getAttribute('data-page')
+      switchPage(page)
+    })
+  })
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    if (confirm('Log out of ONJE?')) {
+      sessionStorage.removeItem('onje_user_role')
+      sessionStorage.removeItem('onje_user_name')
+      document.getElementById('app-container').classList.add('hidden')
+      document.getElementById('login-overlay').classList.remove('hidden')
+      inputPin = ''
+      document.querySelectorAll('.pin-display .dot').forEach(d => d.classList.remove('filled'))
+      document.getElementById('login-error').classList.add('hidden')
+    }
+  })
+
+  document.addEventListener('storage', event => {
+    if ([STORAGE_KEYS.menu, STORAGE_KEYS.orders, STORAGE_KEYS.settings].includes(event.key)) {
+      loadData()
+    }
+  })
+
+  const chefButton = document.getElementById('btn-chef-settings')
+  if (chefButton) {
+    chefButton.addEventListener('click', () => {
+      const current = getSettings().chefWhatsapp
+      const next = window.prompt('Enter the chef WhatsApp number with country code', current)
+      if (next === null) return
+
+      const cleaned = sanitizePhoneNumber(next)
+      if (!cleaned) {
+        alert('Please enter a valid WhatsApp number.')
+        return
+      }
+
+      saveSettings({
+        ...getSettings(),
+        chefWhatsapp: cleaned
+      })
+
+      alert('Chef WhatsApp number saved.')
+    })
+  }
+}
+
 // --- APPLICATION STARTUP ---
 document.addEventListener('DOMContentLoaded', () => {
   startClock()
   setupLogin()
-
-  const dbConnected = initDatabase()
-  if (dbConnected) {
-    loadData()
-  }
+  bindSharedControls()
+  loadData()
 })
