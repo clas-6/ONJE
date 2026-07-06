@@ -1096,11 +1096,31 @@ function startClock() {
 }
 
 function bindSharedControls() {
+  const sidebarToggle = document.getElementById('sidebar-toggle')
+  const sidebarBackdrop = document.getElementById('sidebar-backdrop')
+
+  function closeSidebar() {
+    document.body.classList.remove('sidebar-open')
+  }
+
+  function toggleSidebar() {
+    document.body.classList.toggle('sidebar-open')
+  }
+
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', toggleSidebar)
+  }
+
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', closeSidebar)
+  }
+
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault()
       const page = link.getAttribute('data-page')
       switchPage(page)
+      closeSidebar()
     })
   })
 
@@ -1110,10 +1130,15 @@ function bindSharedControls() {
       sessionStorage.removeItem('onje_user_name')
       document.getElementById('app-container').classList.add('hidden')
       document.getElementById('login-overlay').classList.remove('hidden')
+      closeSidebar()
       inputPin = ''
       document.querySelectorAll('.pin-display .dot').forEach(d => d.classList.remove('filled'))
       document.getElementById('login-error').classList.add('hidden')
     }
+  })
+
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeSidebar()
   })
 
   document.addEventListener('storage', event => {
