@@ -28,7 +28,7 @@ const STORAGE_KEYS = {
   settings: 'onje_app_settings'
 }
 
-const MENU_CATEGORIES = ['Food', 'Drink', 'Spice', 'Cream', 'Powder']
+const MENU_CATEGORIES = ['Food', 'Drink', 'Spice', 'Spice/Sauce', 'Cream', 'Powder']
 
 // --- APPLICATION STATE ---
 let menuItems = []
@@ -36,6 +36,7 @@ let allOrders = []
 let activeOrders = []
 let salesOrders = []
 let costEntries = []
+let selectedChefOrderIds = new Set()
 let currentUser = null
 let inputPin = ''
 let selectedRole = 'Admin'
@@ -139,6 +140,16 @@ function nextOrderId() {
   return maxId + 1
 }
 
+function formatMoney(amount) {
+  return `₦${Number(amount || 0).toLocaleString()}`
+}
+
+function getOrderItemSummary(order) {
+  return (order.items || [])
+    .map(item => `${item.quantity}x ${item.name}`)
+    .join(', ')
+}
+
 // Sound Synthesizer
 function playNotificationSound(type) {
   try {
@@ -208,6 +219,11 @@ function refreshState() {
     .filter(order => order.status === 'Delivered')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   costEntries = getCostEntries().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+  const activeOrderIds = new Set(activeOrders.map(order => String(order.id)))
+  selectedChefOrderIds = new Set(
+    [...selectedChefOrderIds].filter(orderId => activeOrderIds.has(String(orderId)))
+  )
 }
 
 function loadData() {
@@ -381,35 +397,44 @@ function getChefWhatsappNumber(promptIfMissing = false) {
   return cleaned
 }
 
-function buildChefMessage(order) {
-  const orderedAt = new Date(order.created_at).toLocaleString([], {
-    dateStyle: 'medium',
-    timeStyle: 'short'
+function buildChefMessage(orders) {
+  const list = Array.isArray(orders) ? orders : [orders]
+
+  if (list.length === 0) return ''
+
+  const lines = []
+  const total = list.reduce((sum, order) => sum + Number(order.total_price || 0), 0)
+
+  if (list.length === 1) {
+    const order = list[0]
+    const itemsText = getOrderItemSummary(order) || 'No items'
+    const noteText = order.notes ? `\nNote: ${order.notes}` : ''
+    return [
+      `Order #${order.id} - ${order.customer_name}`,
+      itemsText,
+      formatMoney(order.total_price) + noteText
+    ].join('\n')
+  }
+
+  lines.push(`Bulk Orders (${list.length})`)
+  list.forEach(order => {
+    const itemsText = getOrderItemSummary(order) || 'No items'
+    const shortLine = `#${order.id} ${order.customer_name}: ${itemsText} | ${formatMoney(order.total_price)}`
+    lines.push(order.notes ? `${shortLine} | Note: ${order.notes}` : shortLine)
   })
+  lines.push(`Total: ${formatMoney(total)}`)
 
-  const itemsText = order.items
-    .map(item => `- ${item.quantity} x ${item.name} (${item.category || 'Food'})`)
-    .join('\n')
-
-  return [
-    `New Order #${order.id}`,
-    `Customer: ${order.customer_name}`,
-    `Time: ${orderedAt}`,
-    '',
-    'Items:',
-    itemsText,
-    '',
-    `Notes: ${order.notes || 'None'}`,
-    `Total: NGN ${Number(order.total_price).toLocaleString()}`,
-    `Status: ${order.status}`
-  ].join('\n')
+  return lines.join('\n')
 }
 
-function sendOrderToChef(order) {
+function sendOrdersToChef(orders) {
+  const list = Array.isArray(orders) ? orders.filter(Boolean) : [orders].filter(Boolean)
+  if (list.length === 0) return false
+
   const phone = getChefWhatsappNumber(true)
   if (!phone) return false
 
-  const message = buildChefMessage(order)
+  const message = buildChefMessage(list)
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
   const win = window.open(url, '_blank', 'noopener,noreferrer')
 
@@ -419,6 +444,38 @@ function sendOrderToChef(order) {
   }
 
   return true
+}
+
+function sendOrderToChef(order) {
+  return sendOrdersToChef(order)
+}
+
+function sendSelectedOrdersToChef() {
+  const selectedOrders = activeOrders.filter(order => selectedChefOrderIds.has(String(order.id)))
+  if (selectedOrders.length === 0) {
+    alert('Select one or more active orders first.')
+    return false
+  }
+  return sendOrdersToChef(selectedOrders)
+}
+
+function updateKitchenSelectionState() {
+  const countEl = document.getElementById('kitchen-selected-count')
+  const sendButton = document.getElementById('btn-send-selected-orders')
+  const clearButton = document.getElementById('btn-clear-selected-orders')
+  const selectedCount = selectedChefOrderIds.size
+
+  if (countEl) {
+    countEl.innerText = String(selectedCount)
+  }
+
+  if (sendButton) {
+    sendButton.disabled = selectedCount === 0
+  }
+
+  if (clearButton) {
+    clearButton.disabled = selectedCount === 0
+  }
 }
 
 // --- PAGE ROUTING ---
@@ -879,6 +936,7 @@ function renderKitchenPage() {
         <p>Orders will appear here as soon as they are placed.</p>
       </div>
     `
+    updateKitchenSelectionState()
     return
   }
 
@@ -929,7 +987,13 @@ function renderKitchenPage() {
       return `
         <div class="kitchen-card status-${statusClass}" data-id="${order.id}">
           <div class="k-card-header">
-            <span class="k-order-num">ORDER #${order.id}</span>
+            <div class="k-card-header-left">
+              <label class="kitchen-select-order">
+                <input type="checkbox" class="kitchen-order-checkbox" data-id="${order.id}" ${selectedChefOrderIds.has(String(order.id)) ? 'checked' : ''}>
+                <span>Select</span>
+              </label>
+              <span class="k-order-num">ORDER #${order.id}</span>
+            </div>
             <span class="k-order-time"><i class="fa-regular fa-clock"></i> ${time}</span>
           </div>
 
@@ -992,6 +1056,18 @@ function renderKitchenPage() {
     })
   })
 
+  grid.querySelectorAll('.kitchen-order-checkbox').forEach(input => {
+    input.addEventListener('change', () => {
+      const id = input.getAttribute('data-id')
+      if (input.checked) {
+        selectedChefOrderIds.add(String(id))
+      } else {
+        selectedChefOrderIds.delete(String(id))
+      }
+      updateKitchenSelectionState()
+    })
+  })
+
   grid.querySelectorAll('.k-item-check').forEach(check => {
     check.addEventListener('click', () => {
       check.classList.toggle('fa-regular')
@@ -999,6 +1075,8 @@ function renderKitchenPage() {
       check.classList.toggle('checked')
     })
   })
+
+  updateKitchenSelectionState()
 }
 
 // --- SALES REPORTING ---
@@ -1098,6 +1176,8 @@ function startClock() {
 function bindSharedControls() {
   const sidebarToggle = document.getElementById('sidebar-toggle')
   const sidebarBackdrop = document.getElementById('sidebar-backdrop')
+  const sendSelectedOrdersButton = document.getElementById('btn-send-selected-orders')
+  const clearSelectedOrdersButton = document.getElementById('btn-clear-selected-orders')
 
   function closeSidebar() {
     document.body.classList.remove('sidebar-open')
@@ -1113,6 +1193,18 @@ function bindSharedControls() {
 
   if (sidebarBackdrop) {
     sidebarBackdrop.addEventListener('click', closeSidebar)
+  }
+
+  if (sendSelectedOrdersButton) {
+    sendSelectedOrdersButton.addEventListener('click', sendSelectedOrdersToChef)
+  }
+
+  if (clearSelectedOrdersButton) {
+    clearSelectedOrdersButton.addEventListener('click', () => {
+      selectedChefOrderIds = new Set()
+      renderKitchenPage()
+      updateKitchenSelectionState()
+    })
   }
 
   document.querySelectorAll('.nav-link').forEach(link => {
